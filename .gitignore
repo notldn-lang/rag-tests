@@ -132,6 +132,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# Secrets accidentally dropped in the repo root
+Voyage.txt
+
 # Spyder project settings
 .spyderproject
 .spyproject

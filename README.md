@@ -5,7 +5,7 @@ A bare bones RAG application for educational purposes.
 DISCLAIMER: There are several concepts in this repository that can be implemented in much better ways.  The point of this repository is to remove unfamiliar terms and abstractions as much as possible to demonstrate the essential concepts of a RAG application.
 
 You should get acquainted first with RAG and [when to use it and when not to.](https://www.anthropic.com/news/contextual-retrieval)
-Also, feel free to check out the [BGE family of models](https://huggingface.co/BAAI/bge-small-en-v1.5) a series of API accessible models for many RAG pieces such as embeddings, retrieval, reranking, etc. 
+Embeddings and answers are generated with the [Google Gemini API](https://ai.google.dev/gemini-api/docs) (`gemini-embedding-001` and `gemini-3.8-flash`). Retrieval is a hybrid of pgvector similarity and Postgres full-text search, fused with Reciprocal Rank Fusion, then reranked with [Voyage AI](https://docs.voyageai.com/docs/reranker) (`rerank-2-lite`).
 
 ## Prerequisites
 
@@ -76,9 +76,9 @@ sudo apt install postgresql-client
 ```bash
 touch .env
 ```
-Note: You can use the example_env.txt as a reference for the required environment variables.
+Note: You can use the example_env.txt as a reference for the required environment variables (`GEMINI_API_KEY` and `VOYAGE_API_KEY`).
 
-5. **Export your Hugging Face API Key environment variable:**
+5. **Export your API key environment variables:**
 ```
 source .env
 ```
