@@ -8,7 +8,7 @@ DROP EXTENSION IF EXISTS vector;
 CREATE EXTENSION vector;
 
 -- Create the chunks table
--- 3072 dims matches Google's gemini-embedding-001 default output dimension
+-- 3072 dims matches OpenAI's text-embedding-3-large default output dimension
 CREATE TABLE chunks (
     id bigserial PRIMARY KEY,
     embedding vector(3072),

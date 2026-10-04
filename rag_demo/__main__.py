@@ -4,8 +4,8 @@ import os
 import time
 from dotenv import load_dotenv
 
-### Google GenAI для эмбеддингов и для ответов
-from google import genai
+### LangChain + OpenAI для эмбеддингов и для ответов
+from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 
 ### PostgreSQL adapter for Python
 import psycopg
@@ -22,20 +22,36 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data"
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 150
 
-# Изменили модель эмбеддингов на бесплатную от Google
-EMBEDDING_MODEL = "gemini-embedding-001"
-ANSWER_MODEL = "gemini-3.8-flash"
+# OpenAI-модели через EPAM AI DIAL (Azure-совместимый прокси)
+AZURE_ENDPOINT = "https://ai-proxy.lab.epam.com"
+AZURE_API_VERSION = "2023-07-01-preview"
+# text-embedding-3-large отдаёт 3072 измерения — как и колонка в schema.sql
+EMBEDDING_MODEL = "text-embedding-3-large-1"
+ANSWER_MODEL = "gpt-4o-2024-11-20"
 
-# Инициализируем клиент (ключ берём из GEMINI_API_KEY в .env, используется и для
-# эмбеддингов, и для ответов)
-google_client = genai.Client()
+# Ключ берём из OPENAI_API_KEY в .env, он используется и для эмбеддингов, и для ответов
+embeddings = AzureOpenAIEmbeddings(
+    api_key=os.environ["OPENAI_API_KEY"],
+    azure_endpoint=AZURE_ENDPOINT,
+    api_version=AZURE_API_VERSION,
+    azure_deployment=EMBEDDING_MODEL,
+    # Отправляем текст как есть, а не токены tiktoken — прокси принимает строки
+    check_embedding_ctx_length=False,
+)
+llm = AzureChatOpenAI(
+    api_key=os.environ["OPENAI_API_KEY"],
+    azure_endpoint=AZURE_ENDPOINT,
+    api_version=AZURE_API_VERSION,
+    model=ANSWER_MODEL,
+    temperature=0.0,
+)
 
 # Клиент Voyage AI для reranking (ключ берём из VOYAGE_API_KEY в .env)
 voyage_client = voyageai.Client()
 RERANK_MODEL = "rerank-2-lite"
 
 ### Argument parser
-parser = argparse.ArgumentParser(description="RAG Demo with Google Embeddings")
+parser = argparse.ArgumentParser(description="RAG Demo with LangChain and OpenAI")
 parser.add_argument(
     "--skip-embedding-step",
     action="store_true",
@@ -45,12 +61,8 @@ args = parser.parse_args()
 
 ### Useful functions
 def get_embedding(text):
-    """Получение эмбеддинга от Google (text-embedding-004)"""
-    response = google_client.models.embed_content(
-        model=EMBEDDING_MODEL,
-        contents=text,
-    )
-    return response.embeddings[0].values
+    """Получение эмбеддинга от OpenAI через LangChain"""
+    return embeddings.embed_query(text)
 
 def get_answer(question, context):
     prompt = f"""
@@ -60,15 +72,12 @@ Answer the question using only the following context:
 
 Question: {question}
 """
-    response = google_client.models.generate_content(
-        model=ANSWER_MODEL,
-        contents=prompt,
-    )
-    return response.text, prompt
+    response = llm.invoke(prompt)
+    return response.content, prompt
 
 
 ### PostgreSQL database url and connection
-# ВНИМАНИЕ: Убедитесь, что колонка в таблице chunks поддерживает размерность 3072 (для gemini-embedding-001)
+# ВНИМАНИЕ: Убедитесь, что колонка в таблице chunks поддерживает размерность 3072 (для text-embedding-3-large)
 database_url = os.environ.get(
     "DATABASE_URL", "postgresql://postgres:postgres@localhost:6432/rag_demo"
 )
@@ -110,16 +119,13 @@ if not args.skip_embedding_step:
                 "INSERT INTO chunks (embedding, chunk) VALUES (%s, %s)",
                 [str(vector), chunk],
             )
-            
-            # Небольшая пауза (0.5 сек), чтобы не упереться в бесплатные лимиты RPM (Requests Per Minute) от Google
-            time.sleep(0.5)
 
         print(f"\nTotal index time: {time.perf_counter() - tic}ms")
         db.commit()
 
 question = input("\nEnter question: ")
 
-# Create embedding from question using Google
+# Create embedding from question using OpenAI
 question_embedding = get_embedding(question)
 
 # Hybrid search: fuse vector similarity (semantic) with Postgres full-text search
